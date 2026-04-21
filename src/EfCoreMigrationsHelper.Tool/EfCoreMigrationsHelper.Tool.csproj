@@ -9,7 +9,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>efm</ToolCommandName>
     <PackageId>EfCoreMigrationsHelper.Tool</PackageId>
-    <Authors>xgreymx and contributors</Authors>
+    <Authors>xgreymx</Authors>
     <Title>EF Core Migrations Helper</Title>
     <Description>Cross-platform EF Core migration helper with short commands and persisted setup profiles.</Description>
     <PackageTags>ef-core;entity-framework;dotnet-tool;migrations</PackageTags>
