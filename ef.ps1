@@ -54,9 +54,9 @@ $MigrationsDir    = 'Persistence/Migrations'
 $Common = @('--project', $DbContextProject, '--startup-project', $StartupProject)
 
 function Invoke-Ef {
-    param([string[]]$Args)
-    Write-Host "▶ dotnet ef $($Args -join ' ')" -ForegroundColor Cyan
-    & dotnet ef @Args
+    param([string[]]$EfArgs)
+    Write-Host "▶ dotnet ef $($EfArgs -join ' ')" -ForegroundColor Cyan
+    & dotnet ef @EfArgs
     if ($LASTEXITCODE -ne 0) {
         throw "dotnet ef failed with exit code $LASTEXITCODE"
     }
@@ -136,12 +136,12 @@ switch ($Command) {
 
         # Only pass --output-dir if the Migrations folder doesn't exist yet
         $migrationsPath = Join-Path $DbContextProject $MigrationsDir
-        $args = @('migrations', 'add', $Argument) + $Common
+        $efArgs = @('migrations', 'add', $Argument) + $Common
         if (-not (Test-Path $migrationsPath)) {
-            $args += @('--output-dir', $MigrationsDir)
+            $efArgs += @('--output-dir', $MigrationsDir)
             Write-Host "First migration detected — using --output-dir $MigrationsDir" -ForegroundColor Yellow
         }
-        Invoke-Ef $args
+        Invoke-Ef $efArgs
     }
 
     'update' {
@@ -157,10 +157,10 @@ switch ($Command) {
         }
         # else: no arg = forward to latest, no confirmation
 
-        $args = @('database', 'update')
-        if ($Argument) { $args += $Argument }
-        $args += $Common
-        Invoke-Ef $args
+        $efArgs = @('database', 'update')
+        if ($Argument) { $efArgs += $Argument }
+        $efArgs += $Common
+        Invoke-Ef $efArgs
     }
 
     'remove' {
@@ -192,11 +192,11 @@ switch ($Command) {
     }
 
     'script' {
-        $args = @('migrations', 'script')
-        if ($Idempotent) { $args += '--idempotent' }
-        $args += @('-o', $Output)
-        $args += $Common
-        Invoke-Ef $args
+        $efArgs = @('migrations', 'script')
+        if ($Idempotent) { $efArgs += '--idempotent' }
+        $efArgs += @('-o', $Output)
+        $efArgs += $Common
+        Invoke-Ef $efArgs
         Write-Host "✓ SQL script written to $Output" -ForegroundColor Green
     }
 
