@@ -5,18 +5,7 @@
 # Destructive actions (drop / reset / update 0 / rollback to earlier migration)
 # require confirmation. Pass --force to skip prompts (e.g. CI pipelines).
 #
-# Usage:
-#   ./scripts/ef.sh add AddCustomerTable
-#   ./scripts/ef.sh update
-#   ./scripts/ef.sh update DatabaseInitialization   # rollback — prompts
-#   ./scripts/ef.sh remove
-#   ./scripts/ef.sh list
-#   ./scripts/ef.sh drop                            # destructive — double prompt
-#   ./scripts/ef.sh reset                           # destructive — double prompt
-#   ./scripts/ef.sh reset --force                   # skip prompts (CI)
-#   ./scripts/ef.sh script [output.sql]
-#   ./scripts/ef.sh pending
-#   ./scripts/ef.sh bundle
+# Run `./scripts/ef.sh help` for a summary of commands.
 
 set -euo pipefail
 
@@ -33,7 +22,7 @@ FORCE=0
 ARGS=()
 for a in "$@"; do
   case "$a" in
-    --force|-f|-y) FORCE=1 ;;
+    --force|-y) FORCE=1 ;;
     *) ARGS+=("$a") ;;
   esac
 done
@@ -41,10 +30,54 @@ set -- "${ARGS[@]:-}"
 
 # Colors (fallback to no-op if terminal doesn't support)
 if [[ -t 1 ]]; then
-  RED='\033[0;31m'; YELLOW='\033[1;33m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; NC='\033[0m'
+  RED='\033[0;31m'; YELLOW='\033[1;33m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; WHITE='\033[1;37m'; GRAY='\033[0;90m'; NC='\033[0m'
 else
-  RED=''; YELLOW=''; GREEN=''; CYAN=''; NC=''
+  RED=''; YELLOW=''; GREEN=''; CYAN=''; WHITE=''; GRAY=''; NC=''
 fi
+
+show_help() {
+  cat <<EOF
+
+$(echo -e "${CYAN}EF Core migration helper — CDI-PUI${NC}")
+$(echo -e "${GRAY}Wraps \`dotnet ef\` with the correct --project/--startup-project flags.${NC}")
+
+$(echo -e "${WHITE}Configuration:${NC}")
+  DbContext project : $DBCONTEXT_PROJECT
+  Startup project   : $STARTUP_PROJECT
+  Migrations folder : ${DBCONTEXT_PROJECT}${MIGRATIONS_DIR}
+
+$(echo -e "${WHITE}Usage:${NC}")
+  ./scripts/ef.sh <command> [argument] [--force] [--help|-h]
+
+$(echo -e "${WHITE}Commands:${NC}")
+  add <name>          Create a new migration.
+  update [Target]     Apply pending migrations, or update to a target migration.
+                      (Prompts if Target is specified. Double prompt for 'update 0'.)
+  remove              Remove the last (unapplied) migration file.
+  list                List migrations with Applied/Pending status.
+  $(echo -e "${RED}drop                Drop the database. (Double confirmation.)${NC}")
+  $(echo -e "${RED}reset               Drop + re-apply all migrations. (Double confirmation.)${NC}")
+  script [output.sql] Generate an idempotent SQL script (default: migrations.sql).
+  pending             Exit 1 if the model has uncommitted changes.
+  bundle              Build a self-contained efbundle.
+  help                Show this help. Also: --help, -h.
+
+$(echo -e "${WHITE}Flags:${NC}")
+  --force, -y         Skip all confirmations. CI/CD only — do not use interactively.
+  --help, -h          Show this help.
+
+$(echo -e "${WHITE}Examples:${NC}")
+  ./scripts/ef.sh add AddCustomerTable
+  ./scripts/ef.sh update
+  ./scripts/ef.sh update DatabaseInitialization   # rollback, prompts
+  ./scripts/ef.sh reset                           # prompts twice
+  ./scripts/ef.sh reset --force                   # no prompts (CI)
+  ./scripts/ef.sh script release.sql
+
+$(echo -e "${GRAY}For the full \`dotnet ef\` reference, run: dotnet ef --help${NC}")
+
+EOF
+}
 
 run_ef() {
   echo -e "${CYAN}▶ dotnet ef $*${NC}"
@@ -102,10 +135,16 @@ confirm_rollback() {
   fi
 }
 
-cmd="${1:-}"
+cmd="${1:-help}"
 arg="${2:-}"
 
 case "$cmd" in
+
+  help|--help|-h|'')
+    show_help
+    exit 0
+    ;;
+
   add)
     [[ -z "$arg" ]] && { echo "Migration name required. Example: ./scripts/ef.sh add AddProductsTable"; exit 1; }
     args=(migrations add "$arg" "${COMMON[@]}")
@@ -175,8 +214,7 @@ case "$cmd" in
 
   *)
     echo "Unknown command: $cmd"
-    echo "Valid: add | update | remove | list | drop | reset | script | pending | bundle"
-    echo "Flags: --force (skip confirmations, for CI only)"
+    echo "Run './scripts/ef.sh help' for usage."
     exit 1
     ;;
 esac
