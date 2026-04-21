@@ -23,6 +23,33 @@ On Linux/macOS, make the bash script executable:
 chmod +x scripts/ef.sh
 ```
 
+On Windows, if PowerShell blocks the script with an execution-policy error, either unblock the
+single file (safest) or allow local unsigned scripts for your user:
+
+```powershell
+Unblock-File .\scripts\ef.ps1
+# or, one-time, wider scope:
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+## Getting help
+
+Both scripts have a built-in help command listing every subcommand, flag, and example:
+
+```powershell
+.\scripts\ef.ps1 help        # or -Help, -h, or no args
+```
+
+```bash
+./scripts/ef.sh help         # or --help, -h, or no args
+```
+
+PowerShell's built-in help also works:
+
+```powershell
+Get-Help .\scripts\ef.ps1 -Full
+```
+
 ## Safety — Confirmations for destructive actions
 
 Actions that can cause **data loss** require confirmation:
@@ -51,6 +78,7 @@ To bypass prompts in CI/CD, pass `-Force` (PowerShell) or `--force` (bash):
 
 | Command | Purpose | Destructive? |
 |---|---|---|
+| `.\scripts\ef.ps1 help` | Show usage summary (also `-Help`, `-h`, no args) | No |
 | `.\scripts\ef.ps1 add <n>` | Add a new migration | No |
 | `.\scripts\ef.ps1 update` | Apply all pending migrations | No |
 | `.\scripts\ef.ps1 update <Target>` | Update/rollback to a specific migration | 🟡 Single prompt |
@@ -68,6 +96,7 @@ To bypass prompts in CI/CD, pass `-Force` (PowerShell) or `--force` (bash):
 Same commands, same protections:
 
 ```bash
+./scripts/ef.sh help               # usage
 ./scripts/ef.sh add AddCustomerTable
 ./scripts/ef.sh update
 ./scripts/ef.sh reset              # prompts twice
@@ -77,6 +106,9 @@ Same commands, same protections:
 ## Examples
 
 ```powershell
+# Don't remember the commands? Run help.
+.\scripts\ef.ps1 help
+
 # Daily workflow: change your entities, then:
 .\scripts\ef.ps1 add AddProductsTable
 # (read the generated .cs file!)
