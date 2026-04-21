@@ -1,4 +1,4 @@
-# EF Core Migration Scripts
+# EF Core Migration Helper
 
 Helper scripts that wrap `dotnet ef` with the correct `--project` and `--startup-project`
 flags for this solution, so you don't have to remember them.
