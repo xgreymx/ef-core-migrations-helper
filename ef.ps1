@@ -13,6 +13,8 @@
     Destructive actions (drop / reset / update 0 / rollback to earlier migration)
     require confirmation. Pass -Force to skip prompts (e.g. CI pipelines).
 
+    Run `.\scripts\ef.ps1 help` for a summary of commands.
+
 .EXAMPLE
     .\scripts\ef.ps1 add AddCustomerTable
 
@@ -30,9 +32,9 @@
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('add', 'update', 'remove', 'list', 'drop', 'reset', 'script', 'pending', 'bundle')]
-    [string]$Command,
+    [Parameter(Position = 0)]
+    [ValidateSet('add', 'update', 'remove', 'list', 'drop', 'reset', 'script', 'pending', 'bundle', 'help')]
+    [string]$Command = 'help',
 
     [Parameter(Position = 1)]
     [string]$Argument,
@@ -41,7 +43,11 @@ param(
     [switch]$Idempotent = $true,
 
     # Bypasses all confirmation prompts. Use only in CI/CD.
-    [switch]$Force
+    [switch]$Force,
+
+    # Show help and exit.
+    [Alias('h')]
+    [switch]$Help
 )
 
 # --- Configuration ---------------------------------------------------
@@ -52,6 +58,57 @@ $MigrationsDir    = 'Persistence/Migrations'
 # ---------------------------------------------------------------------
 
 $Common = @('--project', $DbContextProject, '--startup-project', $StartupProject)
+
+function Show-Help {
+    $script = $MyInvocation.ScriptName
+    if (-not $script) { $script = '.\scripts\ef.ps1' }
+
+    Write-Host ""
+    Write-Host "EF Core migration helper — CDI-PUI" -ForegroundColor Cyan
+    Write-Host "Wraps `dotnet ef` with the correct --project/--startup-project flags." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "Configuration:" -ForegroundColor White
+    Write-Host "  DbContext project : $DbContextProject"
+    Write-Host "  Startup project   : $StartupProject"
+    Write-Host "  Migrations folder : $DbContextProject$MigrationsDir"
+    Write-Host ""
+    Write-Host "Usage:" -ForegroundColor White
+    Write-Host "  .\scripts\ef.ps1 <command> [argument] [-Force] [-Help]"
+    Write-Host ""
+    Write-Host "Commands:" -ForegroundColor White
+    Write-Host "  add <Name>          " -NoNewline; Write-Host "Create a new migration."
+    Write-Host "  update [Target]     " -NoNewline; Write-Host "Apply pending migrations, or update to a target migration."
+    Write-Host "                        (Prompts if Target is specified. Double prompt for 'update 0'.)"
+    Write-Host "  remove              " -NoNewline; Write-Host "Remove the last (unapplied) migration file."
+    Write-Host "  list                " -NoNewline; Write-Host "List migrations with Applied/Pending status."
+    Write-Host "  drop                " -NoNewline -ForegroundColor Red; Write-Host "Drop the database. (Double confirmation.)" -ForegroundColor Red
+    Write-Host "  reset               " -NoNewline -ForegroundColor Red; Write-Host "Drop + re-apply all migrations. (Double confirmation.)" -ForegroundColor Red
+    Write-Host "  script [-Output]    " -NoNewline; Write-Host "Generate an idempotent SQL script (default: migrations.sql)."
+    Write-Host "  pending             " -NoNewline; Write-Host "Exit 1 if the model has uncommitted changes."
+    Write-Host "  bundle              " -NoNewline; Write-Host "Build a self-contained efbundle.exe."
+    Write-Host "  help                " -NoNewline; Write-Host "Show this help. Also: -Help, -h."
+    Write-Host ""
+    Write-Host "Flags:" -ForegroundColor White
+    Write-Host "  -Force              Skip all confirmations. CI/CD only — do not use interactively."
+    Write-Host "  -Output <file>      Output file for 'script' (default: migrations.sql)."
+    Write-Host "  -Help, -h           Show this help."
+    Write-Host ""
+    Write-Host "Examples:" -ForegroundColor White
+    Write-Host "  .\scripts\ef.ps1 add AddCustomerTable"
+    Write-Host "  .\scripts\ef.ps1 update"
+    Write-Host "  .\scripts\ef.ps1 update DatabaseInitialization   # rollback, prompts"
+    Write-Host "  .\scripts\ef.ps1 reset                           # prompts twice"
+    Write-Host "  .\scripts\ef.ps1 reset -Force                    # no prompts (CI)"
+    Write-Host "  .\scripts\ef.ps1 script -Output release.sql"
+    Write-Host ""
+    Write-Host "For the full `dotnet ef` reference, run: dotnet ef --help" -ForegroundColor Gray
+    Write-Host ""
+}
+
+if ($Help -or $Command -eq 'help') {
+    Show-Help
+    exit 0
+}
 
 function Invoke-Ef {
     param([string[]]$EfArgs)
