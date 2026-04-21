@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>efm</ToolCommandName>
+    <PackageId>EfCoreMigrationsHelper.Tool</PackageId>
+    <Authors>xgreymx and contributors</Authors>
+    <Title>EF Core Migrations Helper</Title>
+    <Description>Cross-platform EF Core migration helper with short commands and persisted setup profiles.</Description>
+    <PackageTags>ef-core;entity-framework;dotnet-tool;migrations</PackageTags>
+    <PackageProjectUrl>https://github.com/xgreymx/ef-core-migrations-helper</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/xgreymx/ef-core-migrations-helper</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>Initial public release with setup, named profiles, short EF Core commands, and repository-local wrappers.</PackageReleaseNotes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="" Link="README.md" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="" Link="LICENSE" />
+  </ItemGroup>
+
+</Project>

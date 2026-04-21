@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EfCoreMigrationsHelper.Tool/EfCoreMigrationsHelper.Tool.csproj" />
+  </Folder>
+</Solution>
