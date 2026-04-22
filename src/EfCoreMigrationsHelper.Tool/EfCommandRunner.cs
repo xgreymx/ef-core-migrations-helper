@@ -150,12 +150,13 @@ internal sealed class EfCommandRunner
     public async Task<int> RunAsync(EfCommandRequest command, CancellationToken cancellationToken = default)
     {
         var autoRecoverEnabled = command.AutoRecover && !IsAutoRecoverDisabledByEnvironment();
-        Console.WriteLine($"> dotnet {FormatArguments(command.Arguments)}");
+        using var activity = ConsoleUi.StartCommand(command.Arguments);
 
         var result = await _processRunner.RunCapturedAsync(command.WorkingDirectory, command.Arguments, cancellationToken);
         if (result.ExitCode == 0)
         {
-            WriteCapturedOutput(result);
+            ConsoleUi.WriteCapturedOutput(result);
+            ConsoleUi.WriteCommandSummary(0, activity.Elapsed);
             return 0;
         }
 
@@ -163,39 +164,44 @@ internal sealed class EfCommandRunner
             || string.IsNullOrWhiteSpace(command.StartupProject)
             || !LooksLikeCipBlock(result.CombinedOutput))
         {
-            WriteCapturedOutput(result);
+            ConsoleUi.WriteCapturedOutput(result);
+            ConsoleUi.WriteCommandSummary(result.ExitCode, activity.Elapsed);
             return result.ExitCode;
         }
 
-        Console.Error.WriteLine("Detected a likely Windows code integrity block while loading the EF Core startup assembly; running clean/build and retrying once.");
+        ConsoleUi.WriteWarning("Detected a likely Windows code integrity block while loading the EF Core startup assembly; running clean/build and retrying once.");
         _appendAutoRecoverLog(command.StartupProject, command.Arguments);
 
         var cleanArguments = new[] { "clean", command.StartupProject };
-        Console.WriteLine($"> dotnet {FormatArguments(cleanArguments)}");
+        using var cleanActivity = ConsoleUi.StartCommand(cleanArguments, enableSpinner: false);
         var cleanExitCode = await _processRunner.RunStreamingAsync(command.WorkingDirectory, cleanArguments, cancellationToken);
+        ConsoleUi.WriteCommandSummary(cleanExitCode, cleanActivity.Elapsed);
         if (cleanExitCode != 0)
         {
             return cleanExitCode;
         }
 
         var buildArguments = new[] { "build", command.StartupProject };
-        Console.WriteLine($"> dotnet {FormatArguments(buildArguments)}");
+        using var buildActivity = ConsoleUi.StartCommand(buildArguments, enableSpinner: false);
         var buildExitCode = await _processRunner.RunStreamingAsync(command.WorkingDirectory, buildArguments, cancellationToken);
+        ConsoleUi.WriteCommandSummary(buildExitCode, buildActivity.Elapsed);
         if (buildExitCode != 0)
         {
             return buildExitCode;
         }
 
         var retryCommand = command with { AutoRecover = false };
-        Console.WriteLine($"> dotnet {FormatArguments(retryCommand.Arguments)}");
+        using var retryActivity = ConsoleUi.StartCommand(retryCommand.Arguments);
         var retryResult = await _processRunner.RunCapturedAsync(retryCommand.WorkingDirectory, retryCommand.Arguments, cancellationToken);
         if (retryResult.ExitCode == 0)
         {
-            WriteCapturedOutput(retryResult);
+            ConsoleUi.WriteCapturedOutput(retryResult);
+            ConsoleUi.WriteCommandSummary(0, retryActivity.Elapsed);
             return 0;
         }
 
-        WriteCapturedOutput(result);
+        ConsoleUi.WriteCapturedOutput(result);
+        ConsoleUi.WriteCommandSummary(result.ExitCode, activity.Elapsed);
         return result.ExitCode;
     }
 
@@ -223,7 +229,7 @@ internal sealed class EfCommandRunner
             var directory = Path.Combine(localAppData, "efm");
             Directory.CreateDirectory(directory);
             var logPath = Path.Combine(directory, "auto-recover.log");
-            var line = $"{DateTimeOffset.UtcNow:O}\t{startupProject}\t{FormatArguments(args)}{Environment.NewLine}";
+            var line = $"{DateTimeOffset.UtcNow:O}\t{startupProject}\t{ConsoleUi.FormatArguments(args)}{Environment.NewLine}";
             File.AppendAllText(logPath, line);
         }
         catch (IOException)
@@ -232,24 +238,6 @@ internal sealed class EfCommandRunner
         catch (UnauthorizedAccessException)
         {
         }
-    }
-
-    private static void WriteCapturedOutput(DotnetCommandCaptureResult result)
-    {
-        if (!string.IsNullOrEmpty(result.StandardOutput))
-        {
-            Console.Out.Write(result.StandardOutput);
-        }
-
-        if (!string.IsNullOrEmpty(result.StandardError))
-        {
-            Console.Error.Write(result.StandardError);
-        }
-    }
-
-    private static string FormatArguments(IReadOnlyList<string> arguments)
-    {
-        return string.Join(' ', arguments.Select(QuoteArgument));
     }
 
     private static string? TryGetOptionValue(IReadOnlyList<string> args, string optionName)
@@ -268,12 +256,5 @@ internal sealed class EfCommandRunner
         }
 
         return null;
-    }
-
-    private static string QuoteArgument(string argument)
-    {
-        return argument.Any(char.IsWhiteSpace)
-            ? $"\"{argument.Replace("\"", "\\\"")}\""
-            : argument;
     }
 }

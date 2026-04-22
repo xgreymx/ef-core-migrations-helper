@@ -358,7 +358,7 @@ internal sealed class EfMigrationToolApp
         if (exitCode == 0 && string.Equals(invocation.Command, "script", StringComparison.OrdinalIgnoreCase))
         {
             var output = invocation.TryGetOption("output") ?? invocation.Positionals.FirstOrDefault() ?? "migrations.sql";
-            Console.WriteLine($"SQL script written to {output}");
+            ConsoleUi.WriteSuccess($"SQL script written to {output}");
         }
 
         return exitCode;
@@ -373,7 +373,7 @@ internal sealed class EfMigrationToolApp
 
         var commonArguments = BuildCommonArguments(profile);
 
-        Console.WriteLine("Dropping database...");
+        ConsoleUi.WriteInfo("Dropping database...");
         var dropArguments = new List<string> { "ef", "database", "drop", "-f" };
         dropArguments.AddRange(commonArguments);
 
@@ -385,7 +385,7 @@ internal sealed class EfMigrationToolApp
             return dropExitCode;
         }
 
-        Console.WriteLine("Applying all migrations...");
+        ConsoleUi.WriteInfo("Applying all migrations...");
         var updateArguments = new List<string> { "ef", "database", "update" };
         updateArguments.AddRange(commonArguments);
 
@@ -394,7 +394,7 @@ internal sealed class EfMigrationToolApp
             cancellationToken);
         if (updateExitCode == 0)
         {
-            Console.WriteLine("Database recreated from migrations.");
+            ConsoleUi.WriteSuccess("Database recreated from migrations.");
         }
 
         return updateExitCode;
@@ -420,7 +420,7 @@ internal sealed class EfMigrationToolApp
                 var migrationsPath = Path.Combine(Path.GetDirectoryName(profile.DbContextProject)!, profile.MigrationsDirectory);
                 if (!Directory.Exists(migrationsPath))
                 {
-                    Console.WriteLine($"Using --output-dir {profile.MigrationsDirectory} because the folder does not exist yet.");
+                    ConsoleUi.WriteInfo($"Using --output-dir {profile.MigrationsDirectory} because the folder does not exist yet.");
                     arguments.AddRange(["--output-dir", profile.MigrationsDirectory]);
                 }
 

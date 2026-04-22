@@ -19,6 +19,15 @@ public sealed class EfCommandRunnerTests
         Assert.Equal(expected, EfCommandRunner.LooksLikeCipBlock(output));
     }
 
+    [Theory]
+    [InlineData("20260421174048_DatabaseInitialization", true)]
+    [InlineData("20260421_DatabaseInitialization", false)]
+    [InlineData("DatabaseInitialization", false)]
+    public void LooksLikeMigrationId_matches_expected_patterns(string line, bool expected)
+    {
+        Assert.Equal(expected, ConsoleUi.LooksLikeMigrationId(line));
+    }
+
     [Fact]
     public async Task RunAsync_retries_once_after_cip_failure_and_succeeds()
     {
@@ -79,6 +88,43 @@ public sealed class EfCommandRunnerTests
         Assert.Contains("plain failure", stderr);
         Assert.Single(processRunner.CapturedCommands);
         Assert.Empty(processRunner.StreamingCommands);
+    }
+
+    [Fact]
+    public async Task RunAsync_writes_banner_spacing_and_summary_for_list_output()
+    {
+        const string migrationId = "20260421174048_DatabaseInitialization";
+
+        var processRunner = new ScriptedProcessRunner();
+        processRunner.EnqueueCaptured(
+            0,
+            stdout: string.Join(
+                Environment.NewLine,
+                [
+                    "Build started...",
+                    "Build succeeded.",
+                    "info: Microsoft.EntityFrameworkCore.Database.Command[20101]",
+                    "      Executed DbCommand (15ms) [Parameters=[], CommandType='Text', CommandTimeout='30']",
+                    "      SELECT [MigrationId], [ProductVersion]",
+                    "      FROM [__EFMigrationsHistory]",
+                    "      ORDER BY [MigrationId];",
+                    migrationId,
+                    string.Empty
+                ]));
+
+        var runner = new EfCommandRunner(processRunner, static (_, _) => { });
+        var request = new EfCommandRequest(
+            TestWorkingDirectory,
+            ["ef", "migrations", "list", "--project", TestDbContextProject, "--startup-project", TestStartupProject],
+            TestStartupProject);
+
+        var (exitCode, stdout, stderr) = await ExecuteAsync(runner, request);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(stderr);
+        Assert.Contains("[RUN] Running EF migrations list", stdout);
+        Assert.Contains("[OK] Command completed", stdout);
+        Assert.Contains($"ORDER BY [MigrationId];{Environment.NewLine}{Environment.NewLine}{migrationId}", stdout);
     }
 
     [Fact]
