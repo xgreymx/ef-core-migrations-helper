@@ -2,4 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/EfCoreMigrationsHelper.Tool/EfCoreMigrationsHelper.Tool.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EfCoreMigrationsHelper.Tool.Tests/EfCoreMigrationsHelper.Tool.Tests.csproj" />
+  </Folder>
 </Solution>

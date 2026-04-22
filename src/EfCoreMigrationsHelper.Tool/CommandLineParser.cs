@@ -20,6 +20,7 @@ internal static class CommandLineParser
         "force",
         "help",
         "idempotent",
+        "no-auto-recover",
         "no-idempotent"
     };
 

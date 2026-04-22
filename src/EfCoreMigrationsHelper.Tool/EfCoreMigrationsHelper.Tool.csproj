@@ -5,7 +5,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionPrefix>0.2.0</VersionPrefix>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>efm</ToolCommandName>
     <PackageId>EfCoreMigrationsHelper.Tool</PackageId>
@@ -19,12 +19,18 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Initial public release with setup, named profiles, short EF Core commands, and repository-local wrappers.</PackageReleaseNotes>
+    <PackageReleaseNotes>Add Windows CIP auto-recovery with clean/build retry, opt-out controls, and recovery logging.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="" Link="README.md" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" Link="LICENSE" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>EfCoreMigrationsHelper.Tool.Tests</_Parameter1>
+    </AssemblyAttribute>
   </ItemGroup>
 
 </Project>

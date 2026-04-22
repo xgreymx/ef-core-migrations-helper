@@ -5,7 +5,7 @@ internal sealed class EfMigrationToolApp
     private readonly ToolConfigurationStore _configurationStore = new();
     private readonly EfCommandRunner _commandRunner = new();
 
-    public async Task<int> RunAsync(string[] args)
+    public async Task<int> RunAsync(string[] args, CancellationToken cancellationToken = default)
     {
         CliInvocation invocation;
 
@@ -29,7 +29,7 @@ internal sealed class EfMigrationToolApp
                 "config" => HandleConfig(invocation),
                 "profiles" => HandleProfiles(invocation),
                 "use" => HandleUse(invocation),
-                "add" or "update" or "remove" or "list" or "drop" or "reset" or "script" or "pending" or "bundle" => await HandleEfCommandAsync(invocation),
+                "add" or "update" or "remove" or "list" or "drop" or "reset" or "script" or "pending" or "bundle" => await HandleEfCommandAsync(invocation, cancellationToken),
                 _ => HandleUnknownCommand(invocation.Command)
             };
         }
@@ -84,6 +84,7 @@ internal sealed class EfMigrationToolApp
                 Useful options:
                   --profile <name>            Use or create a named profile
                   --config <path>             Override the config file location
+                  --no-auto-recover          Disable Windows CIP clean/build retry
                   --force, -y                 Skip confirmation prompts
                   --help, -h                  Show help
 
@@ -317,7 +318,7 @@ internal sealed class EfMigrationToolApp
         return 0;
     }
 
-    private async Task<int> HandleEfCommandAsync(CliInvocation invocation)
+    private async Task<int> HandleEfCommandAsync(CliInvocation invocation, CancellationToken cancellationToken)
     {
         var configuration = _configurationStore.Load(invocation.ConfigPath);
         if (configuration.Profiles.Count == 0)
@@ -338,12 +339,12 @@ internal sealed class EfMigrationToolApp
 
         return invocation.Command switch
         {
-            "reset" => await HandleResetAsync(profile, invocation),
-            _ => await RunSingleEfCommandAsync(profile, invocation)
+            "reset" => await HandleResetAsync(profile, invocation, cancellationToken),
+            _ => await RunSingleEfCommandAsync(profile, invocation, cancellationToken)
         };
     }
 
-    private async Task<int> RunSingleEfCommandAsync(EfProfile profile, CliInvocation invocation)
+    private async Task<int> RunSingleEfCommandAsync(EfProfile profile, CliInvocation invocation, CancellationToken cancellationToken)
     {
         if (!ShouldProceed(invocation))
         {
@@ -351,7 +352,9 @@ internal sealed class EfMigrationToolApp
         }
 
         var args = CreateEfArguments(profile, invocation);
-        var exitCode = await _commandRunner.RunAsync(profile.WorkingDirectory, args);
+        var exitCode = await _commandRunner.RunAsync(
+            new EfCommandRequest(profile.WorkingDirectory, args, profile.StartupProject, invocation.AutoRecover),
+            cancellationToken);
         if (exitCode == 0 && string.Equals(invocation.Command, "script", StringComparison.OrdinalIgnoreCase))
         {
             var output = invocation.TryGetOption("output") ?? invocation.Positionals.FirstOrDefault() ?? "migrations.sql";
@@ -361,7 +364,7 @@ internal sealed class EfMigrationToolApp
         return exitCode;
     }
 
-    private async Task<int> HandleResetAsync(EfProfile profile, CliInvocation invocation)
+    private async Task<int> HandleResetAsync(EfProfile profile, CliInvocation invocation, CancellationToken cancellationToken)
     {
         if (!ShouldProceed(invocation))
         {
@@ -374,7 +377,9 @@ internal sealed class EfMigrationToolApp
         var dropArguments = new List<string> { "ef", "database", "drop", "-f" };
         dropArguments.AddRange(commonArguments);
 
-        var dropExitCode = await _commandRunner.RunAsync(profile.WorkingDirectory, dropArguments);
+        var dropExitCode = await _commandRunner.RunAsync(
+            new EfCommandRequest(profile.WorkingDirectory, dropArguments, profile.StartupProject, invocation.AutoRecover),
+            cancellationToken);
         if (dropExitCode != 0)
         {
             return dropExitCode;
@@ -384,7 +389,9 @@ internal sealed class EfMigrationToolApp
         var updateArguments = new List<string> { "ef", "database", "update" };
         updateArguments.AddRange(commonArguments);
 
-        var updateExitCode = await _commandRunner.RunAsync(profile.WorkingDirectory, updateArguments);
+        var updateExitCode = await _commandRunner.RunAsync(
+            new EfCommandRequest(profile.WorkingDirectory, updateArguments, profile.StartupProject, invocation.AutoRecover),
+            cancellationToken);
         if (updateExitCode == 0)
         {
             Console.WriteLine("Database recreated from migrations.");

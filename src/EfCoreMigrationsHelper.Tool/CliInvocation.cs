@@ -18,6 +18,8 @@ internal sealed class CliInvocation
 
     public bool Force => HasFlag("force");
 
+    public bool AutoRecover => !HasFlag("no-auto-recover");
+
     public bool WantsHelp => HasFlag("help");
 
     public bool HasFlag(string name)

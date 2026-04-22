@@ -64,6 +64,8 @@ Each profile stores:
 
 This removes the need to type the same long command arguments every time.
 
+On Windows, the tool also auto-recovers from intermittent Code Integrity Policy or Smart App Control assembly-load failures by running `dotnet clean` and `dotnet build` on the configured startup project, then retrying the original `dotnet ef` command once.
+
 ## Configuration
 
 The default config file is project-scoped:
@@ -159,6 +161,29 @@ Destructive commands require confirmation.
 Use `--force` or `-y` to skip prompts in automation.
 
 If a destructive command is cancelled, the tool exits with code `2`.
+
+## Windows Auto-Recovery
+
+When `dotnet ef` fails with the Windows CIP HRESULT `0x800711C7`, or with `Could not load file or assembly` during design-time startup assembly loading, `efm` will:
+
+1. print a one-line warning to stderr
+2. run `dotnet clean` on the configured startup project
+3. run `dotnet build` on the configured startup project
+4. retry the original EF command once
+
+Auto-recovery is enabled by default and can be disabled per command:
+
+```bash
+efm update --no-auto-recover
+```
+
+You can also disable it in CI or other non-interactive environments:
+
+```bash
+EFM_NO_AUTO_RECOVER=1 efm update
+```
+
+Each recovery attempt appends a line to `%LOCALAPPDATA%\efm\auto-recover.log` with the timestamp, startup project, and triggering command.
 
 ## Examples
 
