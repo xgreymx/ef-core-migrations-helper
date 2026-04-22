@@ -1,138 +1,175 @@
-# EF Core Migration Helper
+# EF Core Migrations Helper
 
-Helper scripts that wrap `dotnet ef` with the correct `--project` and `--startup-project`
-flags for this solution, so you don't have to remember them.
+This `main` branch intentionally keeps only the standalone shell helpers:
 
-**Projects:**
-- DbContext lives in `CDI-PUI.Infra`
-- Startup (configuration, DI) lives in `CDI-PUI.Api`
-- Migrations output: `CDI-PUI.Infra/Persistence/Migrations`
+- `ef.ps1`
+- `ef.sh`
 
-## Setup (once per machine)
+If you want the packaged .NET tool and its source code, switch to the `dotnet-tool` branch. That branch has its own README and is the place for the installable `efm` tool.
 
-```powershell
-# Ensure EF tools are installed
+## What this branch is for
+
+Use this branch when you want a zero-build fallback that stays as plain shell scripts inside your repository.
+
+Both scripts now share the same core behavior:
+
+- project-scoped interactive setup
+- saved configuration in `.efm/config.env`
+- the same command names and aliases
+- the same destructive-action confirmations
+- idempotent SQL script generation by default
+
+## Use it in your project
+
+1. Copy `ef.ps1` and/or `ef.sh` into the root of your repository, or into any folder you prefer.
+2. Make sure `dotnet ef` is available.
+3. Run the setup command once from your project root.
+4. Use the saved configuration for day-to-day migration commands.
+
+Install EF Core CLI if needed:
+
+```bash
 dotnet tool install --global dotnet-ef
-# or, if the repo uses a local tool manifest:
+```
+
+If your repo uses a local tool manifest instead:
+
+```bash
 dotnet tool restore
 ```
 
-On Linux/macOS, make the bash script executable:
-
-```bash
-chmod +x scripts/ef.sh
-```
-
-On Windows, if PowerShell blocks the script with an execution-policy error, either unblock the
-single file (safest) or allow local unsigned scripts for your user:
+PowerShell setup:
 
 ```powershell
-Unblock-File .\scripts\ef.ps1
-# or, one-time, wider scope:
+.\ef.ps1 setup
+```
+
+Bash setup:
+
+```bash
+chmod +x ./ef.sh
+./ef.sh setup
+```
+
+If PowerShell blocks the script on Windows, either unblock the file or allow local unsigned scripts for your user:
+
+```powershell
+Unblock-File .\ef.ps1
+# or
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
-## Getting help
+The setup flow discovers `.csproj` files and saves:
 
-Both scripts have a built-in help command listing every subcommand, flag, and example:
+- working directory
+- DbContext project
+- startup project
+- migrations directory
+- optional DbContext name
 
-```powershell
-.\scripts\ef.ps1 help        # or -Help, -h, or no args
+The default config path is:
+
+```text
+.efm/config.env
 ```
 
-```bash
-./scripts/ef.sh help         # or --help, -h, or no args
-```
+The scripts walk up from the current directory and use the nearest project root marker they can find, such as `.git`, `*.sln`, `*.slnx`, `global.json`, `Directory.Build.props`, or `Directory.Build.targets`.
 
-PowerShell's built-in help also works:
+If you want to place the config somewhere else, use `-Config <path>` in PowerShell, `--config <path>` in bash, or set `EFMH_CONFIG_PATH`.
 
-```powershell
-Get-Help .\scripts\ef.ps1 -Full
-```
+## Commands
 
-## Safety — Confirmations for destructive actions
+Both scripts support the same commands:
 
-Actions that can cause **data loss** require confirmation:
+| Command | Purpose |
+| --- | --- |
+| `setup` | Interactive or non-interactive project setup |
+| `config` | Show the saved configuration |
+| `add <Name>` | Create a migration |
+| `update [Target]` | Apply pending migrations or move to a target migration |
+| `remove` | Remove the last unapplied migration |
+| `list` | List migrations |
+| `drop` | Drop the database |
+| `reset` | Drop and recreate the database from migrations |
+| `script [output.sql]` | Generate a SQL script |
+| `pending` | Exit with code `1` when model changes are pending |
+| `bundle [output]` | Build an EF migration bundle |
+| `help [command]` | Show help |
+
+Short aliases are also aligned across both scripts:
+
+- `a` -> `add`
+- `u`, `up` -> `update`
+- `ls` -> `list`
+- `rm` -> `remove`
+- `cfg` -> `config`
+- `init` -> `setup`
+- `sql` -> `script`
+
+## Safety
+
+Destructive commands require confirmation in both scripts:
 
 | Command | Confirmation |
-|---|---|
-| `drop` | 🔴 Double (`y/N` + type `YES`) |
-| `reset` | 🔴 Double (`y/N` + type `YES`) |
-| `update 0` | 🔴 Double (`y/N` + type `YES`) |
-| `update <specific-migration>` | 🟡 Single (`y/N`) — could be a rollback |
-| everything else | ✅ No prompt |
+| --- | --- |
+| `drop` | double confirmation |
+| `reset` | double confirmation |
+| `update 0` | double confirmation |
+| `update <Target>` | single confirmation |
 
-To bypass prompts in CI/CD, pass `-Force` (PowerShell) or `--force` (bash):
+If a destructive command is cancelled, the scripts exit with code `2`.
+
+Use `-Force` in PowerShell or `--force` / `-y` in bash only for automation.
+
+SQL script generation is idempotent by default in both scripts:
 
 ```powershell
-.\scripts\ef.ps1 reset -Force
+.\ef.ps1 script
+.\ef.ps1 script -NoIdempotent
 ```
 
 ```bash
-./scripts/ef.sh reset --force
-```
-
-**Do not use `-Force` interactively.** It exists solely for automated pipelines.
-
-## Windows / PowerShell — `scripts\ef.ps1`
-
-| Command | Purpose | Destructive? |
-|---|---|---|
-| `.\scripts\ef.ps1 help` | Show usage summary (also `-Help`, `-h`, no args) | No |
-| `.\scripts\ef.ps1 add <n>` | Add a new migration | No |
-| `.\scripts\ef.ps1 update` | Apply all pending migrations | No |
-| `.\scripts\ef.ps1 update <Target>` | Update/rollback to a specific migration | 🟡 Single prompt |
-| `.\scripts\ef.ps1 update 0` | Revert ALL migrations | 🔴 Double prompt |
-| `.\scripts\ef.ps1 remove` | Remove the last (unapplied) migration file | No |
-| `.\scripts\ef.ps1 list` | List migrations with Applied/Pending status | No |
-| `.\scripts\ef.ps1 drop` | Drop the database | 🔴 Double prompt |
-| `.\scripts\ef.ps1 reset` | Drop + re-apply all migrations (recreate DB) | 🔴 Double prompt |
-| `.\scripts\ef.ps1 script` | Generate idempotent SQL script | No |
-| `.\scripts\ef.ps1 pending` | Exit code 1 if model has uncommitted changes | No |
-| `.\scripts\ef.ps1 bundle` | Build a self-contained `efbundle.exe` | No |
-
-## Linux / macOS — `scripts/ef.sh`
-
-Same commands, same protections:
-
-```bash
-./scripts/ef.sh help               # usage
-./scripts/ef.sh add AddCustomerTable
-./scripts/ef.sh update
-./scripts/ef.sh reset              # prompts twice
-./scripts/ef.sh reset --force      # no prompts (CI only)
+./ef.sh script
+./ef.sh script --no-idempotent
 ```
 
 ## Examples
 
-```powershell
-# Don't remember the commands? Run help.
-.\scripts\ef.ps1 help
-
-# Daily workflow: change your entities, then:
-.\scripts\ef.ps1 add AddProductsTable
-# (read the generated .cs file!)
-.\scripts\ef.ps1 update
-
-# Recreate your local DB from scratch (prompts for double confirmation)
-.\scripts\ef.ps1 reset
-
-# Roll back to an earlier migration (prompts once)
-.\scripts\ef.ps1 update DatabaseInitialization
-
-# Undo the last migration (only if not yet applied to DB, no prompt)
-.\scripts\ef.ps1 remove
-
-# Generate SQL for DBA to review before prod deploy
-.\scripts\ef.ps1 script -Output release-2026-04.sql
-```
-
-## If project paths ever change
-
-Edit the variables at the top of both `ef.ps1` and `ef.sh`:
+Create the initial config and add a migration:
 
 ```powershell
-$DbContextProject = '.\CDI-PUI.Infra\'
-$StartupProject   = '.\CDI-PUI.Api\'
-$MigrationsDir    = 'Persistence/Migrations'
+.\ef.ps1 setup
+.\ef.ps1 add AddCustomers
+.\ef.ps1 update
 ```
+
+```bash
+./ef.sh setup
+./ef.sh add AddCustomers
+./ef.sh update
+```
+
+Generate a SQL script:
+
+```powershell
+.\ef.ps1 script -Output release.sql
+```
+
+```bash
+./ef.sh script --output release.sql
+```
+
+Check the saved configuration:
+
+```powershell
+.\ef.ps1 config
+```
+
+```bash
+./ef.sh config
+```
+
+## Branches
+
+- `main`: shell-only helpers for repos that want plain scripts.
+- `dotnet-tool`: the installable .NET tool implementation, source code, and its own README.
