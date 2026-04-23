@@ -12,7 +12,7 @@ Install the EF Core CLI if it is not already available:
 dotnet tool install --global dotnet-ef
 ```
 
-Install this tool from NuGet:
+Install this tool globally from NuGet:
 
 ```bash
 dotnet tool install --global EfCoreMigrationsHelper.Tool
@@ -24,12 +24,25 @@ Run:
 efm help
 ```
 
-Note:
+Or install it as a local tool:
 
-- The installed command is `efm`
-- `dotnet efm` is not the correct command
+```bash
+dotnet tool install EfCoreMigrationsHelper.Tool
+dotnet efm help
+```
+
+Command usage:
+
+- A global install exposes the shim command `efm`
+- A local install can be added with `dotnet tool install EfCoreMigrationsHelper.Tool`
+- On .NET 10, if `dotnet-tools.json` does not exist yet, the SDK creates it; if it already exists, the SDK updates it
+- A locally installed tool is invoked as `dotnet efm ...`
+- On Windows, make sure `%USERPROFILE%\.dotnet\tools` is available on `PATH`, otherwise the `efm` command will not resolve
 
 ## Quick Start
+
+The examples below use the global form `efm ...`.
+If you installed the tool locally instead of globally, prepend each example with `dotnet`, for example `dotnet efm list`.
 
 Configure the current project:
 

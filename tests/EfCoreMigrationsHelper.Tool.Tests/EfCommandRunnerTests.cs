@@ -42,8 +42,10 @@ public sealed class EfCommandRunnerTests
         var (exitCode, stdout, stderr) = await ExecuteAsync(runner, CreateRequest());
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("Detected a likely Windows code integrity block", stderr);
+        Assert.Contains("Detected a likely Smart App Control / Code Integrity block", stderr);
+        Assert.Contains("known, sometimes random Windows 11 issue", stdout);
         Assert.Contains("retry succeeded", stdout);
+        Assert.Contains("Automatic clean/build retry succeeded after a Smart App Control block.", stdout);
         Assert.DoesNotContain("0x800711C7", stderr);
         Assert.Equal(2, processRunner.CapturedCommands.Count);
         Assert.Equal(2, processRunner.StreamingCommands.Count);
@@ -65,11 +67,15 @@ public sealed class EfCommandRunnerTests
 
         var runner = new EfCommandRunner(processRunner, static (_, _) => { });
 
-        var (exitCode, _, stderr) = await ExecuteAsync(runner, CreateRequest());
+        var (exitCode, stdout, stderr) = await ExecuteAsync(runner, CreateRequest());
 
         Assert.Equal(19, exitCode);
         Assert.Contains("original cip error", stderr);
         Assert.DoesNotContain("retry failed differently", stderr);
+        Assert.Contains("Already done: dotnet clean", stdout);
+        Assert.Contains("Already done: dotnet build", stdout);
+        Assert.Contains("Windows 11 updates released around February 2026", stdout);
+        Assert.Contains("https://www.reddit.com/r/unrealengine/comments/1q26qsj/win_11_smart_app_control_keeps_blocking_random/", stdout);
         Assert.Equal(2, processRunner.CapturedCommands.Count);
         Assert.Equal(2, processRunner.StreamingCommands.Count);
     }
@@ -138,12 +144,41 @@ public sealed class EfCommandRunnerTests
 
         var runner = new EfCommandRunner(processRunner, static (_, _) => { });
 
-        var (exitCode, _, stderr) = await ExecuteAsync(runner, CreateRequest(invocation.AutoRecover));
+        var (exitCode, stdout, stderr) = await ExecuteAsync(runner, CreateRequest(invocation.AutoRecover));
 
         Assert.Equal(11, exitCode);
         Assert.Contains("0x800711C7", stderr);
+        Assert.Contains("Automatic clean/build retry was skipped because auto-recovery is disabled for this command.", stdout);
+        Assert.Contains("https://www.reddit.com/r/unrealengine/comments/1q26qsj/win_11_smart_app_control_keeps_blocking_random/", stdout);
         Assert.Single(processRunner.CapturedCommands);
         Assert.Empty(processRunner.StreamingCommands);
+    }
+
+    [Fact]
+    public void WriteCapturedOutput_can_start_on_a_new_line_for_spinner_output()
+    {
+        var originalOut = Console.Out;
+        var originalError = Console.Error;
+        using var stdout = new StringWriter();
+        using var stderr = new StringWriter();
+
+        Console.SetOut(stdout);
+        Console.SetError(stderr);
+
+        try
+        {
+            ConsoleUi.WriteCapturedOutput(
+                new DotnetCommandCaptureResult(0, "Build started..." + Environment.NewLine, string.Empty),
+                startOnNewLine: true);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+        }
+
+        Assert.Equal(Environment.NewLine + "Build started..." + Environment.NewLine, stdout.ToString());
+        Assert.Empty(stderr.ToString());
     }
 
     private static EfCommandRequest CreateRequest(bool autoRecover = true)

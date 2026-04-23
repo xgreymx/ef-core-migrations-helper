@@ -5,7 +5,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <VersionPrefix>0.2.1</VersionPrefix>
+    <VersionPrefix>0.2.2</VersionPrefix>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>efm</ToolCommandName>
     <PackageId>EfCoreMigrationsHelper.Tool</PackageId>
@@ -19,7 +19,7 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Polish console UX with colored command banners, result highlighting, spinner feedback, and CIP recovery improvements.</PackageReleaseNotes>
+    <PackageReleaseNotes>Fix spinner/output line breaks, preserve configured nested migrations output directories on first add, and expand Smart App Control troubleshooting guidance and reset emphasis.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

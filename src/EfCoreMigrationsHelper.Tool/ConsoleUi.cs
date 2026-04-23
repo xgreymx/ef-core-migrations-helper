@@ -46,8 +46,17 @@ internal static class ConsoleUi
         WriteStatusLine(Console.Out, "OK", message, ConsoleColor.Green);
     }
 
-    public static void WriteCapturedOutput(DotnetCommandCaptureResult result)
+    public static void WriteCapturedOutput(DotnetCommandCaptureResult result, bool startOnNewLine = false)
     {
+        if (startOnNewLine
+            && (!string.IsNullOrWhiteSpace(result.StandardOutput) || !string.IsNullOrWhiteSpace(result.StandardError)))
+        {
+            lock (Sync)
+            {
+                Console.Out.WriteLine();
+            }
+        }
+
         var state = new RenderState();
         RenderBlock(result.StandardOutput, isErrorStream: false, state);
         RenderBlock(result.StandardError, isErrorStream: true, state);
@@ -322,6 +331,7 @@ internal static class ConsoleUi
         private readonly string _label;
         private readonly bool _enabled;
         private int _lastFrameLength;
+        private int _disposed;
 
         public ConsoleActivity(string label, bool enableSpinner)
         {
@@ -336,8 +346,20 @@ internal static class ConsoleUi
 
         public TimeSpan Elapsed => _stopwatch.Elapsed;
 
+        public bool IsAnimated => _enabled;
+
+        public void Stop()
+        {
+            Dispose();
+        }
+
         public void Dispose()
         {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            {
+                return;
+            }
+
             _stopwatch.Stop();
 
             if (!_enabled)

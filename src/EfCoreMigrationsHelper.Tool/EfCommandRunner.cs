@@ -149,27 +149,42 @@ internal sealed class EfCommandRunner
 
     public async Task<int> RunAsync(EfCommandRequest command, CancellationToken cancellationToken = default)
     {
+        var totalStopwatch = Stopwatch.StartNew();
         var autoRecoverEnabled = command.AutoRecover && !IsAutoRecoverDisabledByEnvironment();
         using var activity = ConsoleUi.StartCommand(command.Arguments);
 
         var result = await _processRunner.RunCapturedAsync(command.WorkingDirectory, command.Arguments, cancellationToken);
+        var isCipBlock = LooksLikeCipBlock(result.CombinedOutput);
+        activity.Stop();
+
         if (result.ExitCode == 0)
         {
-            ConsoleUi.WriteCapturedOutput(result);
-            ConsoleUi.WriteCommandSummary(0, activity.Elapsed);
+            ConsoleUi.WriteCapturedOutput(result, startOnNewLine: activity.IsAnimated);
+            ConsoleUi.WriteCommandSummary(0, totalStopwatch.Elapsed);
             return 0;
         }
 
-        if (!autoRecoverEnabled
-            || string.IsNullOrWhiteSpace(command.StartupProject)
-            || !LooksLikeCipBlock(result.CombinedOutput))
+        if (!isCipBlock)
         {
-            ConsoleUi.WriteCapturedOutput(result);
-            ConsoleUi.WriteCommandSummary(result.ExitCode, activity.Elapsed);
+            ConsoleUi.WriteCapturedOutput(result, startOnNewLine: activity.IsAnimated);
+            ConsoleUi.WriteCommandSummary(result.ExitCode, totalStopwatch.Elapsed);
             return result.ExitCode;
         }
 
-        ConsoleUi.WriteWarning("Detected a likely Windows code integrity block while loading the EF Core startup assembly; running clean/build and retrying once.");
+        if (!autoRecoverEnabled || string.IsNullOrWhiteSpace(command.StartupProject))
+        {
+            ConsoleUi.WriteCapturedOutput(result, startOnNewLine: activity.IsAnimated);
+            WriteSmartAppControlTroubleshooting(
+                command.StartupProject,
+                cleanBuildAttempted: false,
+                skipReason: autoRecoverEnabled
+                    ? "Automatic clean/build retry was skipped because no startup project was available."
+                    : "Automatic clean/build retry was skipped because auto-recovery is disabled for this command.");
+            ConsoleUi.WriteCommandSummary(result.ExitCode, totalStopwatch.Elapsed);
+            return result.ExitCode;
+        }
+
+        WriteSmartAppControlDetectionNotice(command.StartupProject);
         _appendAutoRecoverLog(command.StartupProject, command.Arguments);
 
         var cleanArguments = new[] { "clean", command.StartupProject };
@@ -193,15 +208,21 @@ internal sealed class EfCommandRunner
         var retryCommand = command with { AutoRecover = false };
         using var retryActivity = ConsoleUi.StartCommand(retryCommand.Arguments);
         var retryResult = await _processRunner.RunCapturedAsync(retryCommand.WorkingDirectory, retryCommand.Arguments, cancellationToken);
+        retryActivity.Stop();
         if (retryResult.ExitCode == 0)
         {
-            ConsoleUi.WriteCapturedOutput(retryResult);
-            ConsoleUi.WriteCommandSummary(0, retryActivity.Elapsed);
+            ConsoleUi.WriteCapturedOutput(retryResult, startOnNewLine: retryActivity.IsAnimated);
+            ConsoleUi.WriteSuccess("Automatic clean/build retry succeeded after a Smart App Control block.");
+            ConsoleUi.WriteCommandSummary(0, totalStopwatch.Elapsed);
             return 0;
         }
 
-        ConsoleUi.WriteCapturedOutput(result);
-        ConsoleUi.WriteCommandSummary(result.ExitCode, activity.Elapsed);
+        ConsoleUi.WriteCapturedOutput(result, startOnNewLine: retryActivity.IsAnimated);
+        WriteSmartAppControlTroubleshooting(
+            command.StartupProject,
+            cleanBuildAttempted: true,
+            skipReason: null);
+        ConsoleUi.WriteCommandSummary(result.ExitCode, totalStopwatch.Elapsed);
         return result.ExitCode;
     }
 
@@ -214,6 +235,52 @@ internal sealed class EfCommandRunner
     internal static bool IsAutoRecoverDisabledByEnvironment()
     {
         return string.Equals(Environment.GetEnvironmentVariable("EFM_NO_AUTO_RECOVER"), "1", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void WriteSmartAppControlDetectionNotice(string startupProject)
+    {
+        ConsoleUi.WriteWarning("Detected a likely Smart App Control / Code Integrity block while loading the EF Core startup assembly. Running dotnet clean + dotnet build and retrying once.");
+        ConsoleUi.WriteInfo("This is a known, sometimes random Windows 11 issue where Smart App Control starts blocking project DLLs during development.");
+        ConsoleUi.WriteInfo($"Startup project: {startupProject}");
+        ConsoleUi.WriteInfo("If the retry still fails, the tool will show extra troubleshooting steps and a reference link.");
+    }
+
+    private static void WriteSmartAppControlTroubleshooting(string? startupProject, bool cleanBuildAttempted, string? skipReason)
+    {
+        ConsoleUi.WriteWarning(cleanBuildAttempted
+            ? "Automatic clean/build already ran, but Smart App Control still appears to be blocking the startup assembly."
+            : "The failure still looks like a Smart App Control / Code Integrity block.");
+
+        if (!string.IsNullOrWhiteSpace(startupProject))
+        {
+            ConsoleUi.WriteInfo($"Startup project: {startupProject}");
+        }
+
+        if (cleanBuildAttempted)
+        {
+            if (!string.IsNullOrWhiteSpace(startupProject))
+            {
+                ConsoleUi.WriteSuccess($"Already done: dotnet clean {startupProject}");
+                ConsoleUi.WriteSuccess($"Already done: dotnet build {startupProject}");
+            }
+            else
+            {
+                ConsoleUi.WriteSuccess("Already done: dotnet clean <startup-project>");
+                ConsoleUi.WriteSuccess("Already done: dotnet build <startup-project>");
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(skipReason))
+        {
+            ConsoleUi.WriteInfo(skipReason);
+        }
+
+        ConsoleUi.WriteInfo("Other troubleshooting options:");
+        ConsoleUi.WriteInfo("1. Close Visual Studio, terminals, or any running process that may still have the blocked DLL loaded.");
+        ConsoleUi.WriteInfo("2. Delete bin and obj for the startup and DbContext projects, then rebuild and rerun the command.");
+        ConsoleUi.WriteInfo("3. Reboot Windows and rerun the migration command.");
+        ConsoleUi.WriteWarning("Best long-term development workaround: temporarily disable Smart App Control if it keeps blocking random project DLLs.");
+        ConsoleUi.WriteInfo("Windows 11 updates released around February 2026 allow turning Smart App Control off and on again without reinstalling Windows.");
+        ConsoleUi.WriteInfo("Reference: https://www.reddit.com/r/unrealengine/comments/1q26qsj/win_11_smart_app_control_keeps_blocking_random/");
     }
 
     private static void AppendAutoRecoverLog(string startupProject, IReadOnlyList<string> args)

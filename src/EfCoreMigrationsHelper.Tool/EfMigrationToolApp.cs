@@ -400,7 +400,7 @@ internal sealed class EfMigrationToolApp
         return updateExitCode;
     }
 
-    private List<string> CreateEfArguments(EfProfile profile, CliInvocation invocation)
+    internal List<string> CreateEfArguments(EfProfile profile, CliInvocation invocation)
     {
         var arguments = new List<string> { "ef" };
 
@@ -417,12 +417,13 @@ internal sealed class EfMigrationToolApp
                 arguments.AddRange(["migrations", "add", migrationName]);
                 arguments.AddRange(BuildCommonArguments(profile));
 
-                var migrationsPath = Path.Combine(Path.GetDirectoryName(profile.DbContextProject)!, profile.MigrationsDirectory);
-                if (!Directory.Exists(migrationsPath))
+                var outputDirectory = EnsureMigrationsOutputDirectory(profile, out var createdDirectory);
+                if (createdDirectory)
                 {
-                    ConsoleUi.WriteInfo($"Using --output-dir {profile.MigrationsDirectory} because the folder does not exist yet.");
-                    arguments.AddRange(["--output-dir", profile.MigrationsDirectory]);
+                    ConsoleUi.WriteInfo($"Created migrations directory {outputDirectory}.");
                 }
+
+                arguments.AddRange(["--output-dir", outputDirectory]);
 
                 return arguments;
             }
@@ -543,13 +544,12 @@ internal sealed class EfMigrationToolApp
 
         if (invocation.Force)
         {
-            Console.WriteLine($"Skipping confirmation for update {target} because --force was specified.");
+            ConsoleUi.WriteWarning($"Skipping confirmation for update {target} because --force was specified.");
             return true;
         }
 
-        Console.WriteLine();
-        Console.WriteLine($"Updating to a specific migration: {target}");
-        Console.WriteLine("If this target is behind the current database state, tables or columns may be dropped.");
+        ConsoleUi.WriteWarning($"Updating to a specific migration: {target}");
+        ConsoleUi.WriteInfo("If this target is behind the current database state, tables or columns may be dropped.");
         Console.Write("Continue? [y/N]: ");
 
         var answer = Console.ReadLine();
@@ -562,20 +562,17 @@ internal sealed class EfMigrationToolApp
         return true;
     }
 
-    private bool ConfirmDestructive(bool force, string action, string consequence)
+    internal bool ConfirmDestructive(bool force, string action, string consequence)
     {
         if (force)
         {
-            Console.WriteLine($"Skipping confirmation for '{action}' because --force was specified.");
+            ConsoleUi.WriteWarning($"Skipping confirmation for '{action}' because --force was specified.");
             return true;
         }
 
-        Console.WriteLine();
-        Console.WriteLine("============================================================");
-        Console.WriteLine($"DESTRUCTIVE ACTION: {action}");
-        Console.WriteLine("============================================================");
-        Console.WriteLine(consequence);
-        Console.WriteLine("This cannot be undone automatically.");
+        ConsoleUi.WriteWarning($"DESTRUCTIVE ACTION: {action}");
+        ConsoleUi.WriteError(consequence);
+        ConsoleUi.WriteWarning("This cannot be undone automatically.");
         Console.WriteLine();
 
         Console.Write("Continue? [y/N]: ");
@@ -600,6 +597,22 @@ internal sealed class EfMigrationToolApp
     private static bool IsYes(string? answer)
     {
         return string.Equals(answer, "y", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static string EnsureMigrationsOutputDirectory(EfProfile profile, out bool createdDirectory)
+    {
+        var projectDirectory = Path.GetDirectoryName(profile.DbContextProject)
+            ?? throw new InvalidOperationException("The DbContext project path must include a parent directory.");
+
+        var absolutePath = Path.GetFullPath(Path.Combine(projectDirectory, profile.MigrationsDirectory.Replace('/', Path.DirectorySeparatorChar)));
+        createdDirectory = !Directory.Exists(absolutePath);
+
+        if (createdDirectory)
+        {
+            Directory.CreateDirectory(absolutePath);
+        }
+
+        return Path.GetRelativePath(projectDirectory, absolutePath).Replace('\\', '/');
     }
 
     private static void ValidateProfile(EfProfile profile)
